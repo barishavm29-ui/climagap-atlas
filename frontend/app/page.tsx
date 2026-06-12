@@ -19,24 +19,58 @@ export default function Home() {
   const [selectedIncome, setSelectedIncome] = useState('');
   const [selectedTier, setSelectedTier] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchCountries(), fetchStats(), fetchFilters()]).then(([c, s, f]) => {
-      setAllCountries(c.countries);
-      setFilteredCountries(c.countries);
-      setStats(s);
-      setFilters(f);
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    async function loadInitialData() {
+      try {
+        const [c, s, f] = await Promise.all([fetchCountries(), fetchStats(), fetchFilters()]);
+        if (cancelled) return;
+
+        setAllCountries(c.countries);
+        setFilteredCountries(c.countries);
+        setStats(s);
+        setFilters(f);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load atlas data.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadInitialData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    fetchCountries({
+    if (loading || error) return;
+
+    if (!selectedRegion && !selectedIncome && !selectedTier) return;
+
+    let cancelled = false;
+
+    void fetchCountries({
       region: selectedRegion || undefined,
       income_group: selectedIncome || undefined,
       gap_tier: selectedTier || undefined,
-    }).then(r => setFilteredCountries(r.countries));
-  }, [selectedRegion, selectedIncome, selectedTier]);
+    })
+      .then(r => {
+        if (!cancelled) setFilteredCountries(r.countries);
+      })
+      .catch(err => {
+        console.error('Failed to refresh filtered countries', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRegion, selectedIncome, selectedTier, loading, error, allCountries]);
 
   const handleCountryClick = useCallback((iso3: string) => {
     const c = allCountries.find(c => c.iso3 === iso3);
@@ -54,8 +88,9 @@ export default function Home() {
     setSelectedTier('');
   };
 
-  const highlightedIso3s = new Set(filteredCountries.map(c => c.iso3));
   const hasFilter = !!(selectedRegion || selectedIncome || selectedTier);
+  const visibleCountries = hasFilter ? filteredCountries : allCountries;
+  const highlightedIso3s = new Set(visibleCountries.map(c => c.iso3));
 
   if (loading) return (
     <div className="w-screen h-screen flex items-center justify-center bg-[#0a0f1e]">
@@ -65,6 +100,27 @@ export default function Home() {
       </div>
     </div>
   );
+
+  if (error) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-[#0a0f1e] px-6">
+        <div className="max-w-md text-center">
+          <p className="text-white font-semibold text-lg">Could not load the atlas</p>
+          <p className="text-slate-400 text-sm mt-2">
+            The frontend could not reach the backend service. Check the API base URL and try again.
+          </p>
+          <p className="text-slate-500 text-xs mt-3 break-words">{error}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-500 transition-colors"
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="map-container">
@@ -96,7 +152,7 @@ export default function Home() {
           onIncomeChange={setSelectedIncome}
           onTierChange={setSelectedTier}
           onReset={handleReset}
-          filteredCount={filteredCountries.length}
+          filteredCount={visibleCountries.length}
         />
       )}
 

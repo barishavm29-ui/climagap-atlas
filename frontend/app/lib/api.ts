@@ -1,4 +1,26 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || '/_/backend').replace(/\/$/, '');
+
+function apiUrl(path: string, query?: Record<string, string | undefined>): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = `${API_BASE_URL}${normalizedPath}`;
+  if (!query) return url;
+
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value) searchParams.set(key, value);
+  }
+
+  const queryString = searchParams.toString();
+  return queryString ? `${url}?${queryString}` : url;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Request failed with ${res.status} ${res.statusText} for ${url}`);
+  }
+  return (await res.json()) as T;
+}
 
 export interface Country {
   iso3: string;
@@ -39,27 +61,19 @@ export async function fetchCountries(params?: {
   income_group?: string;
   gap_tier?: string;
 }): Promise<{ count: number; countries: Country[] }> {
-  const url = new URL(`${API}/api/countries`);
-  if (params?.region) url.searchParams.set('region', params.region);
-  if (params?.income_group) url.searchParams.set('income_group', params.income_group);
-  if (params?.gap_tier) url.searchParams.set('gap_tier', params.gap_tier);
-  const res = await fetch(url.toString(), { cache: 'no-store' });
-  return res.json();
+  return fetchJson(apiUrl('/api/countries', params));
 }
 
 export async function fetchCountry(iso3: string): Promise<Country> {
-  const res = await fetch(`${API}/api/countries/${iso3}`, { cache: 'no-store' });
-  return res.json();
+  return fetchJson(apiUrl(`/api/countries/${iso3}`));
 }
 
 export async function fetchStats(): Promise<Stats> {
-  const res = await fetch(`${API}/api/stats`, { cache: 'no-store' });
-  return res.json();
+  return fetchJson(apiUrl('/api/stats'));
 }
 
 export async function fetchFilters(): Promise<Filters> {
-  const res = await fetch(`${API}/api/filters`, { cache: 'no-store' });
-  return res.json();
+  return fetchJson(apiUrl('/api/filters'));
 }
 
 export function getGapColor(gapScore: number | null): string {
