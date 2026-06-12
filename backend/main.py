@@ -8,7 +8,9 @@ app = FastAPI(title="ClimaGap Atlas API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"],
+    # Vercel service routing keeps frontend/backend same-origin in production.
+    # This regex keeps local dev and preview deployments working if they are cross-origin.
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+|http://127\.0\.0\.1:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
